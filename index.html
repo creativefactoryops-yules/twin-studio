@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twin Studio — your AI twin</title>
+<style>
+  :root{--bg:#0a0f0a;--panel:#101a10;--line:#2a3d2a;--ink:#d7e8d0;--dim:#8fa88a;--phos:#3dff73;--acid:#b6ff3d;--copper:#c47c3d;--warn:#ffb03d;--bad:#ff6b6b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:15px;line-height:1.55;padding:0 14px 60px}
+  header{max-width:860px;margin:0 auto;padding:26px 0 8px}
+  h1{font-size:26px;margin:0;color:var(--phos);letter-spacing:1px}
+  h1 .y{color:var(--copper)}
+  .sub{color:var(--dim);margin:6px 0 0}
+  main{max-width:860px;margin:0 auto}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+  h2{font-size:15px;margin:0 0 4px;color:var(--acid);text-transform:uppercase;letter-spacing:1px}
+  .hint{color:var(--dim);font-size:13px;margin:0 0 12px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+  .drop{flex:1 1 260px;border:1px dashed var(--line);border-radius:10px;padding:16px;text-align:center;cursor:pointer;min-height:120px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+  .drop:hover{border-color:var(--phos)}
+  .drop img{max-width:100%;max-height:260px;border-radius:8px;margin:0 auto}
+  .drop input{display:none}
+  .keybox{flex:1 1 300px}
+  label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
+  input[type=password],input[type=text],textarea{width:100%;background:#0a0f0a;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px}
+  textarea{min-height:64px;resize:vertical}
+  button{background:var(--phos);color:#06130a;border:0;border-radius:8px;padding:11px 18px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
+  button.ghost{background:transparent;color:var(--phos);border:1px solid var(--phos)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .status{margin-top:10px;font-size:13px;color:var(--dim);white-space:pre-wrap;word-break:break-word}
+  .status.bad{color:var(--bad)}
+  .status.good{color:var(--phos)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;cursor:pointer;background:#0a0f0a;color:var(--ink)}
+  .chip.sel{background:var(--phos);color:#06130a;border-color:var(--phos);font-weight:700}
+  .chip:hover{border-color:var(--phos)}
+  .group{font-size:13px;color:var(--dim);margin:14px 0 6px}
+  .group b{color:var(--ink);font-weight:700}
+  .result img{max-width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+  .hist{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .hist img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+  .hist img.sel{border-color:var(--acid);outline:2px solid var(--acid)}
+  footer{max-width:860px;margin:26px auto 0;color:var(--dim);font-size:13px}
+  footer b{color:var(--ink)}
+  .warn{color:var(--warn)}
+  @media (max-width:560px){h1{font-size:21px}}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="y">❯ y_</span> TWIN STUDIO</h1>
+  <p class="sub">your ai twin, for pics, try-ons, and fun. non-explicit only.</p>
+  <p class="sub">1. add your photo &nbsp;2. add your gemini key &nbsp;3. pick an outfit and a scene &nbsp;4. generate.</p>
+</header>
+<main>
+
+<section>
+  <h2>your twin</h2>
+  <p class="hint">Your photo and key stay in this browser. They leave it only when you hit generate, in a call straight to Google. Nothing is uploaded to any server of mine.</p>
+  <div class="row">
+    <div class="drop" id="drop">
+      <input type="file" id="photoInput" accept="image/*">
+      <div id="photoPreview">tap here to add your reference photo<br><span style="color:var(--dim);font-size:13px">a clear front-facing photo, neutral expression. it is downscaled to 1024px and kept in this browser.</span></div>
+    </div>
+    <div class="keybox">
+      <label for="keyInput">gemini api key</label>
+      <input type="password" id="keyInput" placeholder="AQ. ... (paste once, it saves in this browser)" autocomplete="off">
+      <button class="ghost" id="saveKeyBtn">save key</button>
+      <button class="ghost" id="checkKeyBtn">check key</button>
+      <div class="status" id="keyStatus">no key saved yet.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>make a pic</h2>
+  <p class="hint">Defaults follow your keeper formula: neutral, mouth closed. Big smiles rarely look like you, so neutral is the default — your call.</p>
+  <div class="group"><b>outfit</b> — what is she wearing</div>
+  <div class="chips" id="outfitChips"></div>
+  <input type="text" id="outfitCustom" placeholder="custom outfit — e.g. denim overalls and a striped tee" style="display:none">
+  <div class="group"><b>scene</b> — where is she</div>
+  <div class="chips" id="sceneChips"></div>
+  <input type="text" id="sceneCustom" placeholder="custom scene — e.g. a rainy toronto side street at dusk" style="display:none">
+  <div class="group"><b>shot</b></div>
+  <div class="chips" id="shotChips"></div>
+  <div class="group"><b>hair</b></div>
+  <div class="chips" id="hairChips"></div>
+  <div class="group"><b>expression</b></div>
+  <div class="chips" id="exprChips"></div>
+  <div class="group"><b>extra</b> — anything else, optional</div>
+  <textarea id="extraPrompt" placeholder="e.g. holding a mug of tea, golden hour, rain on the window behind her"></textarea>
+  <button id="genBtn">generate my pic</button>
+  <button class="ghost" id="copyPromptBtn">copy the prompt</button>
+  <div class="status" id="genStatus">add a photo and a key, then generate.</div>
+</section>
+
+<section class="result">
+  <h2>result</h2>
+  <p class="hint">Images are not saved anywhere — download the ones you like. History below is this session only.</p>
+  <div id="resultWrap"><p style="color:var(--dim)">nothing generated yet.</p></div>
+  <div class="row">
+    <button id="dlBtn" style="display:none">download this pic</button>
+  </div>
+  <div class="hist" id="hist"></div>
+</section>
+
+</main>
+<footer>
+  <p><b>honest limits.</b> The picture comes from Google's gemini-2.5-flash-image model, using the key you paste in. If that model answers <span class="warn">429 / quota</span>, this key has no free image quota — the app shows the exact error, nothing hidden. Seeing a model in the key check is not proof it will answer.</p>
+  <p><b>likeness.</b> This is your twin, for you. It keeps your face from your reference photo and changes only the outfit, scene, and framing. It does not store your photo anywhere but your own browser.</p>
+  <p>twin studio v1 · <span style="color:var(--copper)">❯ y_</span> · built for yules</p>
+</footer>
+
+<script>
+"use strict";
+var LS_PHOTO = "twin_ref_photo";
+var LS_KEY = "twin_gemini_key";
+var LS_PREFS = "twin_prefs";
+var IMAGE_MODEL = "gemini-2.5-flash-image";
+
+var OUTFITS = ["Black turtleneck and jeans","Copper jacket","Moss-green oversized sweater","Leather jacket","Summer dress","Blazer","Hoodie","Upholstery-shop workwear apron","Witchy black dress","Custom..."];
+var SCENES = ["Plain light-grey studio","Garden","Library reading nook","Toronto street","Café","Forest","Workshop","Custom..."];
+var SHOTS = ["Head-and-shoulders portrait","Half-body","Full-body","Close-up face"];
+var HAIRS = ["Long split-dye, half light purple half mint teal","Long green and purple","Dark purple, long","Short platinum blonde","Natural dark, long"];
+var EXPRS = ["Neutral, mouth closed","Slight smile","Serious","Laughing"];
+
+var state = { photoB64: null, photoMime: "image/jpeg", key: "", outfit: OUTFITS[0], scene: SCENES[0], shot: SHOTS[0], hair: HAIRS[0], expr: EXPRS[0], current: null, currentMime: "image/png", history: [] };
+
+function $(id){ return document.getElementById(id); }
+function setStatus(el, msg, kind){ el.textContent = msg; el.className = "status" + (kind ? " " + kind : ""); }
+
+function savePrefs(){
+  try{ localStorage.setItem(LS_PREFS, JSON.stringify({outfit: state.outfit, scene: state.scene, shot: state.shot, hair: state.hair, expr: state.expr})); }catch(e){}
+}
+function loadPrefs(){
+  try{ var p = JSON.parse(localStorage.getItem(LS_PREFS) || "null"); if(p){ state.outfit = p.outfit || state.outfit; state.scene = p.scene || state.scene; state.shot = p.shot || state.shot; state.hair = p.hair || state.hair; state.expr = p.expr || state.expr; } }catch(e){}
+}
+
+function renderChips(elId, items, current, onPick){
+  var box = $(elId); box.innerHTML = "";
+  items.forEach(function(item){
+    var c = document.createElement("span");
+    c.className = "chip" + (item === current ? " sel" : "");
+    c.textContent = item;
+    c.onclick = function(){ onPick(item); };
+    box.appendChild(c);
+  });
+}
+function renderAllChips(){
+  renderChips("outfitChips", OUTFITS, state.outfit, function(v){ state.outfit = v; $("outfitCustom").style.display = (v === "Custom...") ? "" : "none"; savePrefs(); renderAllChips(); });
+  renderChips("sceneChips", SCENES, state.scene, function(v){ state.scene = v; $("sceneCustom").style.display = (v === "Custom...") ? "" : "none"; savePrefs(); renderAllChips(); });
+  renderChips("shotChips", SHOTS, state.shot, function(v){ state.shot = v; savePrefs(); renderAllChips(); });
+  renderChips("hairChips", HAIRS, state.hair, function(v){ state.hair = v; savePrefs(); renderAllChips(); });
+  renderChips("exprChips", EXPRS, state.expr, function(v){ state.expr = v; savePrefs(); renderAllChips(); });
+}
+
+function outfitText(){
+  if(state.outfit === "Custom..."){ var v = $("outfitCustom").value.trim(); return v || "a simple outfit of her choice"; }
+  return state.outfit;
+}
+function sceneText(){
+  if(state.scene === "Custom..."){ var v = $("sceneCustom").value.trim(); return v || "a plain light-grey studio"; }
+  return state.scene;
+}
+
+function buildPrompt(){
+  var parts = [];
+  parts.push("Photorealistic photo of the same woman as in the reference photo.");
+  parts.push("Keep her face, features, and identity exactly the same. Do not change her face, do not beautify it, do not smooth the skin.");
+  parts.push("Hair: " + state.hair + ".");
+  parts.push("She is wearing " + outfitText() + ".");
+  parts.push("Setting: " + sceneText() + ".");
+  parts.push("Shot: " + state.shot + ".");
+  parts.push("Expression: " + state.expr + ".");
+  parts.push("Natural light, realistic skin texture, true-to-life colours, no filters.");
+  var extra = $("extraPrompt").value.trim();
+  if(extra){ parts.push(extra); }
+  return parts.join(" ");
+}
+
+function downscale(file, done){
+  var reader = new FileReader();
+  reader.onload = function(){
+    var img = new Image();
+    img.onload = function(){
+      var max = 1024, w = img.width, h = img.height;
+      if(w > max || h > max){ var s = Math.min(max / w, max / h); w = Math.round(w * s); h = Math.round(h * s); }
+      var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      var url = cv.toDataURL("image/jpeg", 0.85);
+      done(url.split(",")[1]);
+    };
+    img.onerror = function(){ setStatus($("genStatus"), "could not read that photo — try a jpg or png.", "bad"); };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function setPhoto(b64){
+  state.photoB64 = b64;
+  $("photoPreview").innerHTML = "";
+  var img = document.createElement("img");
+  img.src = "data:image/jpeg;base64," + b64;
+  img.alt = "your reference photo";
+  $("photoPreview").appendChild(img);
+  var note = document.createElement("div");
+  note.style.cssText = "color:var(--dim);font-size:13px";
+  note.textContent = "reference photo set. tap to change it.";
+  $("photoPreview").appendChild(note);
+  try{ localStorage.setItem(LS_PHOTO, b64); }catch(e){ setStatus($("genStatus"), "photo kept for this session only — browser storage is full.", ""); }
+}
+
+$("drop").onclick = function(){ $("photoInput").click(); };
+$("photoInput").addEventListener("change", function(){
+  var f = $("photoInput").files[0]; if(f){ downscale(f, setPhoto); }
+  $("photoInput").value = "";
+});
+$("drop").addEventListener("dragover", function(e){ e.preventDefault(); });
+$("drop").addEventListener("drop", function(e){
+  e.preventDefault();
+  var f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f){ downscale(f, setPhoto); }
+});
+
+$("saveKeyBtn").onclick = function(){
+  var k = $("keyInput").value.trim();
+  if(!k){ setStatus($("keyStatus"), "paste a key first.", "bad"); return; }
+  state.key = k;
+  try{ localStorage.setItem(LS_KEY, k); }catch(e){}
+  setStatus($("keyStatus"), "key saved in this browser.", "good");
+};
+
+$("checkKeyBtn").onclick = async function(){
+  var k = ($("keyInput").value.trim() || state.key);
+  if(!k){ setStatus($("keyStatus"), "paste a key first.", "bad"); return; }
+  state.key = k;
+  setStatus($("keyStatus"), "checking key...");
+  try{
+    var r = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {headers: {"x-goog-api-key": k}});
+    var j = await r.json();
+    if(!r.ok){ setStatus($("keyStatus"), "key check failed: HTTP " + r.status + " — " + ((j.error && j.error.message) || "no detail"), "bad"); return; }
+    var names = (j.models || []).map(function(m){ return (m.name || "").replace("models/", ""); });
+    var seesImage = names.indexOf(IMAGE_MODEL) > -1;
+    setStatus($("keyStatus"), "key works — " + names.length + " models visible." + (seesImage ? " image model is listed." : " image model is NOT listed for this key.") + " (seeing it is not proof it will answer.)", seesImage ? "good" : "");
+  }catch(e){
+    setStatus($("keyStatus"), "could not reach Google — check your connection and try again.", "bad");
+  }
+};
+
+$("copyPromptBtn").onclick = async function(){
+  var p = buildPrompt();
+  try{ await navigator.clipboard.writeText(p); setStatus($("genStatus"), "prompt copied — paste it into any image tool if the in-app generate fails.", "good"); }
+  catch(e){ setStatus($("genStatus"), "copy failed — here is the prompt:\n" + p, ""); }
+};
+
+$("genBtn").onclick = async function(){
+  var k = ($("keyInput").value.trim() || state.key);
+  if(!state.photoB64){ setStatus($("genStatus"), "add your reference photo first.", "bad"); return; }
+  if(!k){ setStatus($("genStatus"), "add your gemini key first.", "bad"); return; }
+  state.key = k;
+  try{ localStorage.setItem(LS_KEY, k); }catch(e){}
+  var prompt = buildPrompt();
+  setStatus($("genStatus"), "generating with " + IMAGE_MODEL + " — this can take up to a minute...");
+  $("genBtn").disabled = true;
+  try{
+    var r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + IMAGE_MODEL + ":generateContent", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "x-goog-api-key": k},
+      body: JSON.stringify({contents: [{parts: [{text: prompt}, {inlineData: {mimeType: "image/jpeg", data: state.photoB64}}]}]})
+    });
+    var j = await r.json();
+    if(!r.ok){
+      var msg = (j.error && j.error.message) || ("HTTP " + r.status);
+      var extra = "";
+      if(r.status === 429){ extra = "quota — this key has no free image quota for this model right now. The prompt is still copied-able below, and a key with image quota (or a paid tier) would work."; }
+      setStatus($("genStatus"), "generate failed: HTTP " + r.status + " — " + msg + (extra ? "\n" + extra : ""), "bad");
+      return;
+    }
+    var parts = ((j.candidates || [])[0] || {}).content ? (j.candidates[0].content.parts || []) : [];
+    var imgPart = null;
+    for(var i = 0; i < parts.length; i++){ if(parts[i].inlineData && parts[i].inlineData.data){ imgPart = parts[i]; break; } }
+    if(!imgPart){
+      var textPart = null;
+      for(var t = 0; t < parts.length; t++){ if(parts[t].text){ textPart = parts[t].text; break; } }
+      setStatus($("genStatus"), "the model answered with words, not a picture:" + (textPart ? "\n" + textPart : " (empty reply)"), "bad");
+      return;
+    }
+    var mime = imgPart.inlineData.mimeType || "image/png";
+    var src = "data:" + mime + ";base64," + imgPart.inlineData.data;
+    showResult(src, mime, prompt);
+    setStatus($("genStatus"), "done — generated with " + IMAGE_MODEL + ". download it if you like it.", "good");
+  }catch(e){
+    setStatus($("genStatus"), "could not reach Google — check your connection and try again. (" + e.message + ")", "bad");
+  }finally{
+    $("genBtn").disabled = false;
+  }
+};
+
+function showResult(src, mime, prompt){
+  state.current = src; state.currentMime = mime;
+  var wrap = $("resultWrap"); wrap.innerHTML = "";
+  var img = document.createElement("img");
+  img.src = src; img.alt = "your twin — " + prompt;
+  wrap.appendChild(img);
+  $("dlBtn").style.display = "";
+  state.history.unshift({src: src, prompt: prompt});
+  if(state.history.length > 12){ state.history.length = 12; }
+  renderHist();
+}
+function renderHist(){
+  var h = $("hist"); h.innerHTML = "";
+  state.history.forEach(function(item, idx){
+    var im = document.createElement("img");
+    im.src = item.src; im.alt = "generation " + (idx + 1);
+    if(state.current === item.src){ im.className = "sel"; }
+    im.onclick = function(){ state.current = item.src; state.currentMime = "image/png"; var wrap = $("resultWrap"); wrap.innerHTML = ""; var big = document.createElement("img"); big.src = item.src; big.alt = "your twin"; wrap.appendChild(big); $("dlBtn").style.display = ""; renderHist(); };
+    h.appendChild(im);
+  });
+}
+$("dlBtn").onclick = function(){
+  if(!state.current){ return; }
+  var a = document.createElement("a");
+  var d = new Date();
+  function p(n){ return (n < 10 ? "0" : "") + n; }
+  a.download = "twin-studio-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + ".png";
+  a.href = state.current;
+  document.body.appendChild(a); a.click(); a.remove();
+};
+
+// restore saved state
+(function init(){
+  loadPrefs();
+  try{ state.key = localStorage.getItem(LS_KEY) || ""; if(state.key){ $("keyInput").value = state.key; setStatus($("keyStatus"), "key loaded from this browser.", "good"); } }catch(e){}
+  try{ var ph = localStorage.getItem(LS_PHOTO); if(ph){ setPhoto(ph); } }catch(e){}
+  if(state.outfit === "Custom..."){ $("outfitCustom").style.display = ""; }
+  if(state.scene === "Custom..."){ $("sceneCustom").style.display = ""; }
+  renderAllChips();
+})();
+</script>
+</body>
+</html>
