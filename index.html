@@ -24,6 +24,7 @@
   .keybox{flex:1 1 300px}
   label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
   input[type=password],input[type=text],textarea{width:100%;background:#0a0f0a;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px}
+  input[type=range]{accent-color:var(--phos);width:100%}
   textarea{min-height:64px;resize:vertical}
   button{background:var(--phos);color:#06130a;border:0;border-radius:8px;padding:11px 18px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
   button.ghost{background:transparent;color:var(--phos);border:1px solid var(--phos)}
@@ -51,20 +52,20 @@
 <header>
   <h1><span class="y">❯ y_</span> TWIN STUDIO</h1>
   <p class="sub">your ai twin, for pics, try-ons, and fun. non-explicit only.</p>
-  <p class="sub">1. add your photo &nbsp;2. add your gemini key &nbsp;3. pick an outfit and a scene &nbsp;4. generate.</p>
+  <p class="sub">1. add your photo &nbsp;2. pick an engine &nbsp;3. pick an outfit and a scene &nbsp;4. generate.</p>
 </header>
 <main>
 
 <section>
   <h2>your twin</h2>
-  <p class="hint">Your photo and key stay in this browser. They leave it only when you hit generate, in a call straight to Google. Nothing is uploaded to any server of mine.</p>
+  <p class="hint">Your photo stays in this browser. A Gemini key, if you use that engine, stays in this browser too. Cloudflare uses a token in Vercel (set once), not a key here — nothing about it is in this page.</p>
   <div class="row">
     <div class="drop" id="drop">
       <input type="file" id="photoInput" accept="image/*">
       <div id="photoPreview">tap here to add your reference photo<br><span style="color:var(--dim);font-size:13px">a clear front-facing photo, neutral expression. it is downscaled to 1024px and kept in this browser.</span></div>
     </div>
     <div class="keybox">
-      <label for="keyInput">gemini api key</label>
+      <label for="keyInput">gemini api key — only needed for the Gemini engine</label>
       <input type="password" id="keyInput" placeholder="AQ. ... (paste once, it saves in this browser)" autocomplete="off">
       <button class="ghost" id="saveKeyBtn">save key</button>
       <button class="ghost" id="checkKeyBtn">check key</button>
@@ -76,6 +77,11 @@
 <section>
   <h2>make a pic</h2>
   <p class="hint">Defaults follow your keeper formula: neutral, mouth closed. Big smiles rarely look like you, so neutral is the default — your call.</p>
+  <div class="group"><b>engine</b> — who draws the pic</div>
+  <div class="chips" id="engineChips"></div>
+  <div class="group"><b>how much changes</b> — Cloudflare only; Gemini ignores this</div>
+  <input type="range" id="strengthRange" min="0.4" max="0.85" step="0.05" value="0.65">
+  <div class="hint" id="strengthLabel">0.65 — 0.4 keeps your face, 0.85 changes more</div>
   <div class="group"><b>outfit</b> — what is she wearing</div>
   <div class="chips" id="outfitChips"></div>
   <input type="text" id="outfitCustom" placeholder="custom outfit — e.g. denim overalls and a striped tee" style="display:none">
@@ -92,7 +98,7 @@
   <textarea id="extraPrompt" placeholder="e.g. holding a mug of tea, golden hour, rain on the window behind her"></textarea>
   <button id="genBtn">generate my pic</button>
   <button class="ghost" id="copyPromptBtn">copy the prompt</button>
-  <div class="status" id="genStatus">add a photo and a key, then generate.</div>
+  <div class="status" id="genStatus">add a photo, pick an engine, then generate.</div>
 </section>
 
 <section class="result">
@@ -107,7 +113,8 @@
 
 </main>
 <footer>
-  <p><b>honest limits.</b> The picture comes from Google's gemini-2.5-flash-image model, using the key you paste in. If that model answers <span class="warn">429 / quota</span>, this key has no free image quota — the app shows the exact error, nothing hidden. Seeing a model in the key check is not proof it will answer.</p>
+  <p><b>honest limits.</b> The Gemini engine uses Google's gemini-2.5-flash-image model with the key you paste in. That model answers 429 / quota for free keys — two keys tested, both limit 0 — so Gemini is the backup, not the main engine.</p>
+  <p><b>cloudflare engine.</b> Free tier, about 200 pics a day. The model (SDXL) is scheduled for retirement on Nov 20, 2026 — it works until then, and the model gets swapped when it goes. Your Cloudflare token lives in Vercel, never in this page.</p>
   <p><b>likeness.</b> This is your twin, for you. It keeps your face from your reference photo and changes only the outfit, scene, and framing. It does not store your photo anywhere but your own browser.</p>
   <p>twin studio v1 · <span style="color:var(--copper)">❯ y_</span> · built for yules</p>
 </footer>
@@ -125,16 +132,23 @@ var SHOTS = ["Head-and-shoulders portrait","Half-body","Full-body","Close-up fac
 var HAIRS = ["Long split-dye, half light purple half mint teal","Long green and purple","Dark purple, long","Short platinum blonde","Natural dark, long"];
 var EXPRS = ["Neutral, mouth closed","Slight smile","Serious","Laughing"];
 
-var state = { photoB64: null, photoMime: "image/jpeg", key: "", outfit: OUTFITS[0], scene: SCENES[0], shot: SHOTS[0], hair: HAIRS[0], expr: EXPRS[0], current: null, currentMime: "image/png", history: [] };
+var state = { photoB64: null, photoMime: "image/jpeg", key: "", engine: "cloudflare", strength: 0.65, outfit: OUTFITS[0], scene: SCENES[0], shot: SHOTS[0], hair: HAIRS[0], expr: EXPRS[0], current: null, currentMime: "image/png", history: [] };
 
 function $(id){ return document.getElementById(id); }
 function setStatus(el, msg, kind){ el.textContent = msg; el.className = "status" + (kind ? " " + kind : ""); }
 
 function savePrefs(){
-  try{ localStorage.setItem(LS_PREFS, JSON.stringify({outfit: state.outfit, scene: state.scene, shot: state.shot, hair: state.hair, expr: state.expr})); }catch(e){}
+  try{ localStorage.setItem(LS_PREFS, JSON.stringify({engine: state.engine, strength: state.strength, outfit: state.outfit, scene: state.scene, shot: state.shot, hair: state.hair, expr: state.expr})); }catch(e){}
 }
 function loadPrefs(){
-  try{ var p = JSON.parse(localStorage.getItem(LS_PREFS) || "null"); if(p){ state.outfit = p.outfit || state.outfit; state.scene = p.scene || state.scene; state.shot = p.shot || state.shot; state.hair = p.hair || state.hair; state.expr = p.expr || state.expr; } }catch(e){}
+  try{
+    var p = JSON.parse(localStorage.getItem(LS_PREFS) || "null");
+    if(p){
+      state.engine = (p.engine === "gemini" || p.engine === "cloudflare") ? p.engine : "cloudflare";
+      state.strength = (typeof p.strength === "number") ? p.strength : 0.65;
+      state.outfit = p.outfit || state.outfit; state.scene = p.scene || state.scene; state.shot = p.shot || state.shot; state.hair = p.hair || state.hair; state.expr = p.expr || state.expr;
+    }
+  }catch(e){}
 }
 
 function renderChips(elId, items, current, onPick){
@@ -147,7 +161,19 @@ function renderChips(elId, items, current, onPick){
     box.appendChild(c);
   });
 }
+function renderEngineChips(){
+  var box = $("engineChips"); box.innerHTML = "";
+  var opts = [["cloudflare", "Cloudflare — free, ~200/day"], ["gemini", "Gemini — quota 0 right now"]];
+  opts.forEach(function(o){
+    var c = document.createElement("span");
+    c.className = "chip" + (state.engine === o[0] ? " sel" : "");
+    c.textContent = o[1];
+    c.onclick = function(){ state.engine = o[0]; savePrefs(); renderAllChips(); };
+    box.appendChild(c);
+  });
+}
 function renderAllChips(){
+  renderEngineChips();
   renderChips("outfitChips", OUTFITS, state.outfit, function(v){ state.outfit = v; $("outfitCustom").style.display = (v === "Custom...") ? "" : "none"; savePrefs(); renderAllChips(); });
   renderChips("sceneChips", SCENES, state.scene, function(v){ state.scene = v; $("sceneCustom").style.display = (v === "Custom...") ? "" : "none"; savePrefs(); renderAllChips(); });
   renderChips("shotChips", SHOTS, state.shot, function(v){ state.shot = v; savePrefs(); renderAllChips(); });
@@ -195,6 +221,20 @@ function downscale(file, done){
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
+}
+function downscaleB64(b64, max){
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      var w = img.width, h = img.height;
+      if(w > max || h > max){ var s = Math.min(max / w, max / h); w = Math.round(w * s); h = Math.round(h * s); }
+      var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(cv.toDataURL("image/jpeg", 0.85).split(",")[1]);
+    };
+    img.onerror = function(){ resolve(b64); };
+    img.src = "data:image/jpeg;base64," + b64;
+  });
 }
 
 function setPhoto(b64){
@@ -254,7 +294,34 @@ $("copyPromptBtn").onclick = async function(){
   catch(e){ setStatus($("genStatus"), "copy failed — here is the prompt:\n" + p, ""); }
 };
 
+async function cfGenerate(){
+  if(!state.photoB64){ setStatus($("genStatus"), "add your reference photo first.", "bad"); return; }
+  var prompt = buildPrompt();
+  setStatus($("genStatus"), "generating with Cloudflare SDXL — this can take up to a minute...");
+  $("genBtn").disabled = true;
+  try{
+    var small = await downscaleB64(state.photoB64, 768);
+    var r = await fetch("/api/cf-img2img", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({prompt: prompt, imageB64: small, strength: parseFloat($("strengthRange").value)})});
+    var j = await r.json();
+    if(!r.ok){
+      var msg = (j && j.message) || (j && j.error) || ("HTTP " + r.status);
+      var extra = "";
+      if(j && j.error === "cloudflare-not-connected"){ extra = "Add the two Cloudflare values in Vercel (Settings, Environment Variables), then redeploy."; }
+      setStatus($("genStatus"), "generate failed: " + msg + (extra ? "\n" + extra : ""), "bad");
+      return;
+    }
+    if(!j.image){ setStatus($("genStatus"), "Cloudflare answered but sent no picture.", "bad"); return; }
+    showResult(j.image, "image/png", prompt);
+    setStatus($("genStatus"), "done — Cloudflare SDXL. download it if you like it.", "good");
+  }catch(e){
+    setStatus($("genStatus"), "could not reach the Cloudflare function — check your connection and try again. (" + e.message + ")", "bad");
+  }finally{
+    $("genBtn").disabled = false;
+  }
+}
+
 $("genBtn").onclick = async function(){
+  if(state.engine === "cloudflare"){ cfGenerate(); return; }
   var k = ($("keyInput").value.trim() || state.key);
   if(!state.photoB64){ setStatus($("genStatus"), "add your reference photo first.", "bad"); return; }
   if(!k){ setStatus($("genStatus"), "add your gemini key first.", "bad"); return; }
@@ -333,6 +400,9 @@ $("dlBtn").onclick = function(){
   loadPrefs();
   try{ state.key = localStorage.getItem(LS_KEY) || ""; if(state.key){ $("keyInput").value = state.key; setStatus($("keyStatus"), "key loaded from this browser.", "good"); } }catch(e){}
   try{ var ph = localStorage.getItem(LS_PHOTO); if(ph){ setPhoto(ph); } }catch(e){}
+  $("strengthRange").value = state.strength;
+  $("strengthLabel").textContent = state.strength + " — 0.4 keeps your face, 0.85 changes more";
+  $("strengthRange").addEventListener("input", function(){ state.strength = parseFloat($("strengthRange").value); $("strengthLabel").textContent = $("strengthRange").value + " — 0.4 keeps your face, 0.85 changes more"; savePrefs(); });
   if(state.outfit === "Custom..."){ $("outfitCustom").style.display = ""; }
   if(state.scene === "Custom..."){ $("sceneCustom").style.display = ""; }
   renderAllChips();
